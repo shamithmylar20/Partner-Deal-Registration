@@ -29,7 +29,6 @@ const createDeal = async (req, res) => {
       
       // Documentation fields
       additionalNotes,
-      uploadedFiles,
       agreedToTerms
     } = req.body;
 
@@ -58,57 +57,47 @@ const createDeal = async (req, res) => {
       });
     }
 
-    // Create customer record
-    const customer = await createOrFindCustomer({
-      companyName,
-      domain,
-      legalName: customerLegalName,
-      industry: customerIndustry,
-      location: customerLocation
-    });
+    const dealId = googleSheetsService.generateId();
 
-    // Create deal record
+    // Create deal record (single sheet - no separate customer table)
     const dealData = [
-      googleSheetsService.generateId(), // id
-      req.user?.partnerId || '', // partner_id (from authenticated user)
-      customer.id, // customer_id
-      req.user?.id || '', // submitter_id (from authenticated user)
-      'submitted', // status
-      partnerCompany,
-      submitterName,
-      submitterEmail,
-      territory,
-      companyName,
-      domain,
-      customerLegalName || '',
-      customerIndustry,
-      customerLocation,
-      dealStage,
-      expectedCloseDate,
-      dealValue,
-      contractType,
-      primaryProduct || '',
-      additionalNotes || '',
-      uploadedFiles ? JSON.stringify(uploadedFiles) : '',
-      agreedToTerms.toString(),
-      '', // duplicate_score
-      '', // potential_duplicates
-      '', // approved_by
-      '', // approved_at
-      googleSheetsService.getCurrentTimestamp(), // created_at
-      googleSheetsService.getCurrentTimestamp()  // updated_at
+      dealId, // A: id
+      'submitted', // B: status
+      googleSheetsService.getCurrentTimestamp(), // C: created_at
+      companyName, // D: company_name
+      domain, // E: domain
+      partnerCompany, // F: partner_company
+      submitterName, // G: submitter_name
+      submitterEmail, // H: submitter_email
+      territory, // I: territory
+      customerIndustry, // J: customer_industry
+      customerLocation, // K: customer_location
+      dealStage, // L: deal_stage
+      expectedCloseDate, // M: expected_close_date
+      dealValue, // N: deal_value
+      contractType, // O: contract_type
+      primaryProduct || '', // P: primary_product
+      additionalNotes || '', // Q: additional_notes
+      customerLegalName || '' // R: customer_legal_name
     ];
 
     await googleSheetsService.appendToSheet('Deals', dealData);
 
-    // Get the created deal
-    const createdDeal = await googleSheetsService.findRowByValue('Deals', 'company_name', companyName);
+    // Add audit log entry
+    const auditData = [
+      googleSheetsService.generateId(), // A: id
+      dealId, // B: deal_id
+      submitterEmail, // C: user_email
+      'created', // D: action
+      googleSheetsService.getCurrentTimestamp(), // E: timestamp
+      `Deal created for ${companyName}` // F: notes
+    ];
 
-    console.log(`✅ Deal created successfully for ${companyName}`);
+    await googleSheetsService.appendToSheet('Audit_Log', auditData);
 
     res.status(201).json({
       message: 'Deal registration submitted successfully',
-      dealId: createdDeal.id,
+      dealId: dealId,
       status: 'submitted',
       estimatedApprovalTime: getEstimatedApprovalTime(dealValue),
       nextSteps: [
@@ -120,7 +109,7 @@ const createDeal = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Deal creation error:', error);
+    console.error('Create deal error:', error);
     res.status(500).json({
       error: 'Failed to create deal registration',
       message: error.message
@@ -129,7 +118,7 @@ const createDeal = async (req, res) => {
 };
 
 /**
- * Get all deals (with basic filtering)
+ * Get all deals with optional filtering
  * GET /api/v1/deals
  */
 const getDeals = async (req, res) => {
@@ -138,7 +127,7 @@ const getDeals = async (req, res) => {
     
     const deals = await googleSheetsService.getSheetData('Deals');
     
-    if (!deals || deals.length < 2) {
+    if (!deals || deals.length <= 1) {
       return res.json({
         deals: [],
         total: 0,
@@ -147,10 +136,10 @@ const getDeals = async (req, res) => {
     }
 
     const headers = deals[0];
-    let dealRecords = [];
+    const dealRecords = [];
 
-    // Convert to objects
-    for (let i = 1; i < deals.length && dealRecords.length < limit; i++) {
+    // Process deals (skip header row)
+    for (let i = 1; i < Math.min(deals.length, parseInt(limit) + 1); i++) {
       const deal = {};
       headers.forEach((header, index) => {
         deal[header] = deals[i][index] || '';
@@ -210,7 +199,7 @@ const getDealById = async (req, res) => {
 };
 
 /**
- * Check for duplicate deals
+ * Check for duplicate deals - simplified
  */
 const checkDuplicateDeals = async (companyName, domain) => {
   try {
@@ -256,39 +245,6 @@ const checkDuplicateDeals = async (companyName, domain) => {
 };
 
 /**
- * Create or find customer
- */
-const createOrFindCustomer = async (customerData) => {
-  try {
-    // Check if customer exists
-    let customer = await googleSheetsService.findRowByValue('Customers', 'domain', customerData.domain);
-    
-    if (!customer) {
-      // Create new customer
-      const customerRecord = [
-        googleSheetsService.generateId(),
-        customerData.companyName,
-        customerData.domain,
-        customerData.legalName || '',
-        customerData.industry,
-        customerData.location,
-        '', // country
-        googleSheetsService.getCurrentTimestamp(),
-        googleSheetsService.getCurrentTimestamp()
-      ];
-
-      await googleSheetsService.appendToSheet('Customers', customerRecord);
-      customer = await googleSheetsService.findRowByValue('Customers', 'domain', customerData.domain);
-    }
-
-    return customer;
-  } catch (error) {
-    console.error('Customer creation error:', error);
-    throw error;
-  }
-};
-
-/**
  * Get estimated approval time based on deal value
  */
 const getEstimatedApprovalTime = (dealValue) => {
@@ -308,6 +264,5 @@ module.exports = {
   getDeals,
   getDealById,
   checkDuplicateDeals,
-  createOrFindCustomer,
   getEstimatedApprovalTime
 };

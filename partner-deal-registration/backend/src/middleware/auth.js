@@ -30,14 +30,15 @@ const authenticateToken = async (req, res, next) => {
     }
 
     // Add user info to request object
-    req.user = {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      partnerId: user.partner_id,
-      firstName: user.first_name,
-      lastName: user.last_name
-    };
+// In your auth middleware, change this line:
+req.user = {
+  id: user.id,
+  email: user.email,
+  role: user.role,
+  partnerId: user.partner_company, // Changed from user.partner_id
+  firstName: user.first_name,
+  lastName: user.last_name
+};
 
     next();
   } catch (error) {

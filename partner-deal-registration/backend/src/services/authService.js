@@ -1,244 +1,195 @@
-const bcrypt = require('bcryptjs');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const jwt = require('jsonwebtoken');
 const googleSheetsService = require('./googleSheetsService');
 
 class AuthService {
-  
-  /**
-   * Register a new partner user
-   */
-  async registerUser(userData) {
-    const { email, password, firstName, lastName, company, territory } = userData;
-    
+  constructor() {
+    this.initializeGoogleStrategy();
+  }
+
+  initializeGoogleStrategy() {
+    passport.use(new GoogleStrategy({
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL || '/api/v1/auth/google/callback',
+      scope: ['profile', 'email'] // Explicitly request email scope
+    }, async (accessToken, refreshToken, profile, done) => {
+      try {
+        const result = await this.googleLogin(profile);
+        return done(null, result);
+      } catch (error) {
+        console.error('Google Strategy Error:', error);
+        return done(error);
+      }
+    }));
+  }
+
+  async googleLogin(profile) {
     try {
-      // Check if user already exists
-      const existingUser = await this.findUserByEmail(email);
-      if (existingUser) {
-        throw new Error('User already exists with this email');
+      console.log('=== GOOGLE PROFILE DEBUG ===');
+      console.log('Full profile object:', JSON.stringify(profile, null, 2));
+      console.log('Profile keys:', Object.keys(profile));
+      console.log('Profile.email directly:', profile.email);
+      console.log('===========================');
+
+      // The profile object IS the user data - Google returns it directly
+      const email = profile.email;
+      const firstName = profile.given_name || 'Unknown';
+      const lastName = profile.family_name || 'User';
+      const googleId = profile.sub; // Google uses 'sub' for user ID
+
+      if (!email) {
+        console.error('No email found in profile keys:', Object.keys(profile));
+        console.error('Profile email value:', profile.email);
+        throw new Error('No email found in Google profile. Please ensure email scope is granted.');
       }
 
-      // Hash password
-      const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
-      const passwordHash = await bcrypt.hash(password, saltRounds);
+      console.log('Successfully extracted - Email:', email, 'Name:', firstName, lastName, 'ID:', googleId);
 
-      // Create or find partner company
-      let partner = await this.findPartnerByName(company);
-      
-      if (!partner) {
-        // Create new partner
-        const partnerData = [
-          googleSheetsService.generateId(),
-          company,
-          'reseller',
-          territory,
-          'pending',
-          `${firstName} ${lastName}`,
-          email,
-          '',
-          '',
-          googleSheetsService.getCurrentTimestamp(),
-          googleSheetsService.getCurrentTimestamp()
-        ];
+      // Check if user exists in Users sheet
+      let user = await googleSheetsService.findRowByValue('Users', 'email', email);
+
+      if (!user) {
+        // Create new user with default partner company
+        const defaultPartnerCompany = this.getPartnerCompanyFromEmail(email);
         
-        await googleSheetsService.appendToSheet('Partners', partnerData);
-        partner = await this.findPartnerByName(company);
+        const userData = [
+          googleId, // id
+          email, // email
+          firstName, // first_name
+          lastName, // last_name
+          defaultPartnerCompany, // partner_company
+          'user', // role
+          'active', // status
+          googleSheetsService.getCurrentTimestamp() // created_at
+        ];
+
+        await googleSheetsService.appendToSheet('Users', userData);
+        
+        // Fetch the newly created user
+        user = await googleSheetsService.findRowByValue('Users', 'email', email);
+        
+        console.log('✅ New user created:', email);
+      } else {
+        console.log('✅ Existing user found:', email);
       }
 
-      // Create user
-      const userData = [
-        googleSheetsService.generateId(),
-        partner.id,
-        email,
-        passwordHash,
-        firstName,
-        lastName,
-        'partner_user',
-        'pending',
-        '',
-        'false',
-        '',
-        googleSheetsService.getCurrentTimestamp(),
-        googleSheetsService.getCurrentTimestamp()
-      ];
+      // Create JWT token
+      const tokenPayload = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        partnerId: user.partner_company
+      };
 
-      await googleSheetsService.appendToSheet('Users', userData);
-      const user = await this.findUserByEmail(email);
+      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, { 
+        expiresIn: '24h' 
+      });
 
-      console.log(`✅ New user registered: ${email}`);
-      
-      return {
+      // Format user data for frontend
+      const userData = {
         id: user.id,
         email: user.email,
         firstName: user.first_name,
         lastName: user.last_name,
         role: user.role,
-        status: user.status,
-        partnerName: partner.company_name
+        partnerId: user.partner_company,
+        partnerName: user.partner_company
       };
 
-    } catch (error) {
-      console.error('User registration error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Login user with email and password
-   */
-  async loginUser(email, password) {
-    try {
-      const user = await this.findUserByEmail(email);
-      
-      if (!user || user.status !== 'active') {
-        throw new Error('Invalid credentials or account not active');
-      }
-
-      // Verify password
-      const isValidPassword = await bcrypt.compare(password, user.password_hash);
-      if (!isValidPassword) {
-        throw new Error('Invalid credentials');
-      }
-
-      // Get partner information
-      const partner = await this.findPartnerById(user.partner_id);
-
-      // Generate tokens
-      const tokens = this.generateTokens(user);
-
-      console.log(`✅ User logged in: ${email}`);
-
       return {
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          role: user.role,
-          partnerId: user.partner_id,
-          partnerName: partner?.company_name || 'Unknown Partner'
-        },
-        ...tokens
-      };
-
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Google SSO Login
-   */
-  async googleLogin(googleUser) {
-    try {
-      let user = await this.findUserByEmail(googleUser.email);
-
-      if (!user) {
-        // Create new user from Google data
-        const domain = googleUser.email.split('@')[1];
-        
-        // Create partner if doesn't exist
-        let partner = await this.findPartnerByName(domain);
-        if (!partner) {
-          const partnerData = [
-            googleSheetsService.generateId(),
-            domain,
-            'reseller',
-            'North America',
-            'pending',
-            googleUser.name,
-            googleUser.email,
-            '',
-            '',
-            googleSheetsService.getCurrentTimestamp(),
-            googleSheetsService.getCurrentTimestamp()
-          ];
-          
-          await googleSheetsService.appendToSheet('Partners', partnerData);
-          partner = await this.findPartnerByName(domain);
-        }
-
-        // Create user
-        const userData = [
-          googleSheetsService.generateId(),
-          partner.id,
-          googleUser.email,
-          '', // No password for SSO users
-          googleUser.given_name || googleUser.name,
-          googleUser.family_name || '',
-          'partner_user',
-          'active', // SSO users are automatically active
-          googleSheetsService.getCurrentTimestamp(),
-          'true',
-          googleUser.sub,
-          googleSheetsService.getCurrentTimestamp(),
-          googleSheetsService.getCurrentTimestamp()
-        ];
-
-        await googleSheetsService.appendToSheet('Users', userData);
-        user = await this.findUserByEmail(googleUser.email);
-      }
-
-      // Generate tokens
-      const tokens = this.generateTokens(user);
-      const partner = await this.findPartnerById(user.partner_id);
-
-      return {
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          role: user.role,
-          partnerId: user.partner_id,
-          partnerName: partner?.company_name || 'Unknown Partner'
-        },
-        ...tokens
+        user: userData,
+        accessToken: accessToken
       };
 
     } catch (error) {
       console.error('Google login error:', error);
+      throw new Error('Authentication failed: ' + error.message);
+    }
+  }
+
+  /**
+   * Determine partner company from email domain
+   * This is a simple mapping - you can customize this logic
+   */
+  getPartnerCompanyFromEmail(email) {
+    const domain = email.split('@')[1]?.toLowerCase();
+    
+    // Simple domain to partner company mapping
+    const domainMappings = {
+      'techflow.com': 'TechFlow Solutions',
+      'digitalinnovations.com': 'Digital Innovations Inc.',
+      'cloudware.com': 'CloudWare Partners',
+      'databridge.com': 'DataBridge Consulting',
+      'daxa.ai': 'Daxa Internal', // For internal testing
+    };
+
+    return domainMappings[domain] || 'External Partner';
+  }
+
+  /**
+   * Create or update user in Users sheet
+   */
+  async createOrUpdateUser(profile) {
+    try {
+      const email = profile.emails[0].value;
+      const firstName = profile.name.givenName;
+      const lastName = profile.name.familyName;
+      
+      let user = await googleSheetsService.findRowByValue('Users', 'email', email);
+      
+      if (!user) {
+        // Create new user
+        const partnerCompany = this.getPartnerCompanyFromEmail(email);
+        
+        const userData = [
+          profile.id, // id (use Google ID)
+          email,
+          firstName,
+          lastName,
+          partnerCompany,
+          'user', // default role
+          'active', // status
+          googleSheetsService.getCurrentTimestamp()
+        ];
+
+        await googleSheetsService.appendToSheet('Users', userData);
+        user = await googleSheetsService.findRowByValue('Users', 'email', email);
+      }
+
+      return user;
+    } catch (error) {
+      console.error('Create/update user error:', error);
       throw error;
     }
   }
 
   /**
-   * Generate JWT tokens
+   * Generate JWT token
    */
-  generateTokens(user) {
+  generateToken(user) {
     const payload = {
       id: user.id,
       email: user.email,
       role: user.role,
-      partnerId: user.partner_id
+      partnerId: user.partner_company
     };
 
-    const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+    return jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: '24h'
     });
-
-    return { accessToken };
   }
 
   /**
-   * Find user by email
+   * Verify JWT token
    */
-  async findUserByEmail(email) {
-    return await googleSheetsService.findRowByValue('Users', 'email', email);
-  }
-
-  /**
-   * Find partner by name
-   */
-  async findPartnerByName(companyName) {
-    return await googleSheetsService.findRowByValue('Partners', 'company_name', companyName);
-  }
-
-  /**
-   * Find partner by ID
-   */
-  async findPartnerById(partnerId) {
-    return await googleSheetsService.findRowByValue('Partners', 'id', partnerId);
+  verifyToken(token) {
+    try {
+      return jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+      throw new Error('Invalid token');
+    }
   }
 }
 
