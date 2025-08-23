@@ -193,28 +193,6 @@ const QuickCheckStep: React.FC<QuickCheckStepProps> = ({ formData, setFormData, 
             </p>
           )}
         </div>
-
-        {/* Next Button */}
-        <div className="flex justify-end pt-4">
-          <Button 
-            onClick={handleNext}
-            disabled={!isFormValid()}
-            className="min-w-[120px]"
-          >
-            Continue
-          </Button>
-        </div>
-
-        {/* Next Button */}
-        <div className="flex justify-end pt-4">
-          <Button 
-            onClick={handleNext}
-            disabled={!isFormValid()}
-            className="min-w-[120px]"
-          >
-            Continue
-          </Button>
-        </div>
       </CardContent>
     </Card>
   );

@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import apiClient from '@/services/apiClient';
 
 // Import step components
-import { QuickCheckStep } from "@/components/registration/QuickCheckStep";
+import QuickCheckStep from "@/components/registration/QuickCheckStep";
 import { CoreInfoStep } from "@/components/registration/CoreInfoStep";
 import { DealIntelligenceStep } from "@/components/registration/DealIntelligenceStep";
 import { DocumentationStep } from "@/components/registration/DocumentationStep";
@@ -238,37 +238,13 @@ const Register = () => {
           />
         );
       case "core-info":
-        return (
-          <CoreInfoStep 
-            formData={formData} 
-            setFormData={setFormData} 
-            onNext={() => setCurrentStepId("deal-intelligence")}
-          />
-        );
+        return <CoreInfoStep formData={formData} setFormData={setFormData} />;
       case "deal-intelligence":
-        return (
-          <DealIntelligenceStep 
-            formData={formData} 
-            setFormData={setFormData} 
-            onNext={() => setCurrentStepId("documentation")}
-          />
-        );
+        return <DealIntelligenceStep formData={formData} setFormData={setFormData} />;
       case "documentation":
-        return (
-          <DocumentationStep 
-            formData={formData} 
-            setFormData={setFormData} 
-            onNext={() => setCurrentStepId("review")}
-          />
-        );
+        return <DocumentationStep formData={formData} setFormData={setFormData} />;
       case "review":
-        return (
-          <ReviewStep 
-            formData={formData} 
-            setFormData={setFormData} 
-            onNext={handleSubmit}
-          />
-        );
+        return <ReviewStep formData={formData} setFormData={setFormData} />;
       default:
         return null;
     }
