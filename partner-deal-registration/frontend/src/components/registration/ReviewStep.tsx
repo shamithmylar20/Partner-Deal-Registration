@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileText, CheckCircle, AlertTriangle } from "lucide-react";
+import { useFormValidation, ValidationRule } from "@/hooks/useFormValidation";
+
 
 interface ReviewStepProps {
   formData: any;
@@ -69,6 +71,25 @@ export const ReviewStep = ({ formData, setFormData }: ReviewStepProps) => {
       return "Auto-approval with Partner Manager notification";
     }
   };
+
+  const debugValidationRules: ValidationRule[] = [
+  { field: 'companyName', required: true, minLength: 2 },
+  { field: 'domain', required: true, pattern: /^[a-z0-9.-]+\.[a-z]{2,}$/ },
+  { field: 'partnerCompany', required: true },
+  { field: 'submitterName', required: true, minLength: 2, maxLength: 50 },
+  { field: 'submitterEmail', required: true, email: true },
+  { field: 'territory', required: true },
+  { field: 'customerIndustry', required: true },
+  { field: 'customerLocation', required: true },
+  { field: 'dealStage', required: true },
+  { field: 'expectedCloseDate', required: true, futureDate: true },
+  { field: 'dealValue', required: true, positiveNumber: true },
+  { field: 'contractType', required: true },
+  { field: 'agreedToTerms', required: true }
+];
+
+const { errors: debugErrors, isValid: debugIsValid } = useFormValidation(formData, debugValidationRules);
+
 
   return (
     <div className="space-y-6">

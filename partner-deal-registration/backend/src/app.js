@@ -7,9 +7,12 @@ const rateLimit = require('express-rate-limit');
 require('express-async-errors');
 require('dotenv').config();
 
+
 // Import route modules
 const authRoutes = require('./routes/auth');
 const dealRoutes = require('./routes/deals');
+const adminRoutes = require('./routes/admin');
+
 
 const app = express();
 
@@ -87,6 +90,7 @@ app.get('/api/v1/test', (req, res) => {
 // Authentication routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/deals', dealRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 // Test Google Sheets connection
 app.get('/api/v1/test-sheets', async (req, res) => {

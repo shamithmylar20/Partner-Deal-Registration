@@ -16,6 +16,28 @@ class GoogleSheetsService {
     }
   }
 
+  /**
+ * Update a specific row in a sheet
+ */
+async updateRow(sheetName, rowIndex, values) {
+  try {
+    const response = await this.sheets.spreadsheets.values.update({
+      spreadsheetId: this.spreadsheetId,
+      range: `${sheetName}!${rowIndex}:${rowIndex}`,
+      valueInputOption: 'USER_ENTERED',
+      resource: {
+        values: [values]
+      }
+    });
+
+    console.log(`✅ Row ${rowIndex} updated in ${sheetName}`);
+    return response.data;
+  } catch (error) {
+    console.error(`❌ Error updating row in ${sheetName}:`, error.message);
+    throw error;
+  }
+}
+
   async initializeAuth() {
     try {
       const keyPath = process.env.GOOGLE_PRIVATE_KEY_PATH || './credentials/google-service-account.json';

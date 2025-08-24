@@ -155,7 +155,8 @@ export const getSubmissionPayload = (formData: any) => {
     'contractType',
     'primaryProduct',
     'additionalNotes',
-    'uploadedFiles'
+    'uploadedFiles',
+    'agreedToTerms' // ADD THIS LINE
   ];
   
   allowedFields.forEach(field => {
