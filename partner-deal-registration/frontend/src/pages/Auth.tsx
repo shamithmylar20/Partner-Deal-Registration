@@ -13,34 +13,65 @@ const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     
     setIsLoading(true);
-    
-    // Accept any valid email format + any password
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (emailRegex.test(email) && password.length > 0) {
-      setTimeout(() => {
-        setIsLoading(false);
-        // Mock session storage
-        localStorage.setItem('auth-session', JSON.stringify({ email, timestamp: Date.now() }));
+
+    try {
+      const response = await fetch('http://localhost:3001/api/v1/auth/email-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store auth data
+        localStorage.setItem('auth-token', data.accessToken);
+        localStorage.setItem('auth-user', JSON.stringify(data.user));
+        localStorage.setItem('auth-session', JSON.stringify({ 
+          email: data.user.email, 
+          timestamp: Date.now() 
+        }));
+
         toast({
           title: "Login Successful",
-          description: "Welcome back to the Partner Portal!",
+          description: `Welcome, ${data.user.firstName}!`,
         });
-        window.location.href = "/dashboard";
-      }, 1200);
-    } else {
-      setIsLoading(false);
+
+        // Role-based redirect
+        if (data.user.role === 'admin') {
+          window.location.href = '/admin';
+        } else {
+          // Partners go to deal registration page
+          window.location.href = '/register';
+        }
+      } else {
+        toast({
+          title: "Login Failed",
+          description: data.message || "Invalid email or password",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Login error:', error);
       toast({
-        title: "Login Failed",
-        description: "Please enter a valid email and password.",
+        title: "Login Error",
+        description: "Something went wrong. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -81,6 +112,17 @@ const Auth = () => {
     }
   };
 
+  // Quick admin login function for testing
+  const fillAdminCredentials = () => {
+    const emailInput = document.getElementById('email') as HTMLInputElement;
+    const passwordInput = document.getElementById('password') as HTMLInputElement;
+    
+    if (emailInput && passwordInput) {
+      emailInput.value = 'admin@daxa.ai';
+      passwordInput.value = 'admin123';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -105,7 +147,7 @@ const Auth = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <form onSubmit={handleLogin} className="space-y-4">
+                <form onSubmit={handleEmailLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
                     <div className="relative">
@@ -153,6 +195,20 @@ const Auth = () => {
                     {isLoading ? "Signing In..." : "Sign In"}
                   </Button>
                 </form>
+
+                {/* Quick Admin Login for Testing */}
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800 mb-2 font-medium">Admin Testing</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={fillAdminCredentials}
+                    className="text-xs w-full"
+                    type="button"
+                  >
+                    Use Admin Login (admin@daxa.ai / admin123)
+                  </Button>
+                </div>
 
                 <div className="text-center">
                   <Button variant="link" className="text-sm">

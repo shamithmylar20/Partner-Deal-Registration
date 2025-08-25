@@ -6,9 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const navigationItems = [
   { href: "/", label: "Home" },
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/deals", label: "Deal Tracker" },
-  { href: "/support", label: "Support" }
+  { href: "/dashboard", label: "Dashboard" }
 ];
 
 export const Header = () => {

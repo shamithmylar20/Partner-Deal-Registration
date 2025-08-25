@@ -2,6 +2,9 @@ const express = require('express');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const authService = require('../services/authService');
+const jwt = require('jsonwebtoken');
+const googleSheetsService = require('../services/googleSheetsService');
+
 
 const router = express.Router();
 
@@ -65,6 +68,84 @@ router.post('/register', async (req, res) => {
     console.error('Registration error:', error);
     res.status(400).json({
       error: error.message
+    });
+  }
+});
+
+/**
+ * @route POST /api/v1/auth/email-login
+ * @desc Email/password login for testing
+ */
+router.post('/email-login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Test admin credentials
+    const testCredentials = {
+      'admin@daxa.ai': 'admin123'  // Test admin account
+    };
+
+    if (!testCredentials[email] || testCredentials[email] !== password) {
+      return res.status(401).json({
+        error: 'Invalid credentials',
+        message: 'Email or password is incorrect'
+      });
+    }
+
+    // Check if user exists in Users sheet, create if not
+    let user = await googleSheetsService.findRowByValue('Users', 'email', email);
+    
+    if (!user) {
+      // Create test admin user
+      const userData = [
+        'test-admin-' + Date.now(), // id
+        email, // email
+        'Test', // first_name
+        'Admin', // last_name
+        'Daxa Internal', // partner_company
+        'admin', // role
+        'active', // status
+        googleSheetsService.getCurrentTimestamp() // created_at
+      ];
+
+      await googleSheetsService.appendToSheet('Users', userData);
+      user = await googleSheetsService.findRowByValue('Users', 'email', email);
+    }
+
+    // Create JWT token
+    const tokenPayload = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      partnerId: user.partner_company
+    };
+
+    const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, { 
+      expiresIn: '24h' 
+    });
+
+    // Format user data for frontend
+    const userData = {
+      id: user.id,
+      email: user.email,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      role: user.role,
+      partnerId: user.partner_company,
+      partnerName: user.partner_company
+    };
+
+    res.json({
+      message: 'Login successful',
+      user: userData,
+      accessToken: accessToken
+    });
+
+  } catch (error) {
+    console.error('Email login error:', error);
+    res.status(500).json({
+      error: 'Authentication failed',
+      message: error.message
     });
   }
 });
