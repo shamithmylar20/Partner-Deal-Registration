@@ -46,11 +46,6 @@ const steps = [
   },
   {
     number: "04",
-    title: "Documentation",
-    description: "Upload supporting materials and additional context (optional)."
-  },
-  {
-    number: "05",
     title: "Review & Submit",
     description: "Final review and submission with automated approval routing."
   }
@@ -120,7 +115,7 @@ const Home = () => {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-foreground mb-4">
-              Simple 5-Step Process
+              Simple 4-Step Process
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Our streamlined workflow guides you through each step with intelligent assistance and real-time validation.

@@ -136,6 +136,7 @@ const getDeals = async (req, res) => {
     }
 
     const headers = deals[0];
+    const submitterEmailIndex = headers.indexOf('submitter_email');
     const dealRecords = [];
 
     // Process deals (skip header row)
@@ -145,7 +146,14 @@ const getDeals = async (req, res) => {
         deal[header] = deals[i][index] || '';
       });
       
-      // Apply filters
+      // FIXED: Role-based filtering - admins see all deals, users see only their own
+      const canViewDeal = req.user?.role === 'admin' || deal.submitter_email === req.user?.email;
+      
+      if (!canViewDeal) {
+        continue; // Skip deals this user shouldn't see
+      }
+      
+      // Apply additional filters
       if (status && deal.status !== status) continue;
       if (partner && deal.partner_company !== partner) continue;
       
@@ -155,7 +163,11 @@ const getDeals = async (req, res) => {
     res.json({
       deals: dealRecords,
       total: dealRecords.length,
-      filters: { status, partner, limit }
+      filters: { status, partner, limit },
+      user: {
+        email: req.user?.email,
+        role: req.user?.role
+      }
     });
 
   } catch (error) {
@@ -181,6 +193,16 @@ const getDealById = async (req, res) => {
       return res.status(404).json({
         error: 'Deal not found',
         dealId: id
+      });
+    }
+
+    // FIXED: Check if user can view this specific deal
+    const canViewDeal = req.user?.role === 'admin' || deal.submitter_email === req.user?.email;
+    
+    if (!canViewDeal) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only view deals you submitted'
       });
     }
 

@@ -189,24 +189,36 @@ router.get('/google', passport.authenticate('google', {
 
 /**
  * @route GET /api/v1/auth/google/callback
- * @desc Google OAuth callback
+ * @desc Google OAuth callback with admin check
  */
 router.get('/google/callback', 
-    passport.authenticate('google', { session: false }),
-    (req, res) => {
-      try {
-        const { user, accessToken } = req.user;
-        
-        // Use the correct frontend URL
-        const frontendURL = 'http://localhost:8080';
-        res.redirect(`${frontendURL}/auth/callback?token=${accessToken}&user=${encodeURIComponent(JSON.stringify(user))}`);
-      } catch (error) {
-        console.error('Google callback error:', error);
-        const frontendURL = 'http://localhost:8080';
-        res.redirect(`${frontendURL}/auth?error=google_auth_failed`);
-      }
+  passport.authenticate('google', { session: false }),
+  async (req, res) => {
+    try {
+      const { user, accessToken } = req.user;
+      
+      // Import the checkAdminStatus function
+      const { checkAdminStatus } = require('../middleware/auth');
+      
+      // Check if user should be admin based on Admins sheet
+      const isAdmin = await checkAdminStatus(user.email);
+      
+      // Override role based on Admins sheet check
+      const updatedUser = {
+        ...user,
+        role: isAdmin ? 'admin' : user.role || 'user'
+      };
+      
+      // Use the correct frontend URL
+      const frontendURL = 'http://localhost:8080'; // Changed from 8080
+      res.redirect(`${frontendURL}/auth/callback?token=${accessToken}&user=${encodeURIComponent(JSON.stringify(updatedUser))}`);
+    } catch (error) {
+      console.error('Google callback error:', error);
+      const frontendURL = 'http://localhost:8080';
+      res.redirect(`${frontendURL}/auth?error=google_auth_failed`);
     }
-  );
+  }
+);
 
 /**
  * @route GET /api/v1/auth/me

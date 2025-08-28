@@ -29,14 +29,20 @@ export const CoreInfoStep = ({ formData, setFormData }: CoreInfoStepProps) => {
     location: formData.customerLocation || ""
   });
 
-  // Auto-populate partner info from authenticated user
+  // Auto-populate name and email from authenticated user (non-editable)
+  // But make company editable
   useEffect(() => {
     if (user) {
       const autoPartnerInfo = {
-        company: user.partnerName || user.partnerId || "Unknown Company",
+        // Company is now editable - start with default but allow changes
+        company: partnerInfo.company || user.partnerName || user.partnerId || "",
+        
+        // Name and email are non-editable from Google Auth
         submitterName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
         submitterEmail: user.email || "",
-        territory: partnerInfo.territory // Keep territory editable for now
+        
+        // Territory remains editable
+        territory: partnerInfo.territory
       };
       
       setPartnerInfo(autoPartnerInfo);
@@ -59,7 +65,7 @@ export const CoreInfoStep = ({ formData, setFormData }: CoreInfoStepProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Partner Information Section - Auto-populated & Read-only */}
+      {/* Partner Information Section */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -67,37 +73,37 @@ export const CoreInfoStep = ({ formData, setFormData }: CoreInfoStepProps) => {
             Partner Information
             <Badge variant="secondary" className="text-xs">
               <Lock className="w-3 h-3 mr-1" />
-              From Your Profile
+              Name & Email Locked
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Partner Company - Read-only, auto-populated */}
+          {/* Partner Company - Now Editable */}
           <FormField
             label="Partner Company"
             required
-            tooltip="Your company name from your authenticated profile. This ensures accurate deal attribution."
+            tooltip="Your company name. You can edit this if it needs to be different for this specific deal."
           >
             <div className="relative">
               <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 value={partnerInfo.company}
-                disabled
-                className="pl-10 bg-muted/30 text-muted-foreground cursor-not-allowed"
-                placeholder="Loading your company..."
+                onChange={(e) => setPartnerInfo({...partnerInfo, company: e.target.value})}
+                className="pl-10"
+                placeholder="Enter your company name..."
               />
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              ✓ Auto-populated from your profile
+              You can edit this company name for this deal
             </p>
           </FormField>
 
           <div className="grid md:grid-cols-2 gap-4">
-            {/* Submitter Name - Read-only, auto-populated */}
+            {/* Submitter Name - Non-editable, auto-populated */}
             <FormField
               label="Submitter Name"
               required
-              tooltip="Your full name from your profile. This appears on notifications and approval routing."
+              tooltip="Your full name from your Google profile. This appears on notifications and approval routing."
             >
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -108,16 +114,17 @@ export const CoreInfoStep = ({ formData, setFormData }: CoreInfoStepProps) => {
                   placeholder="Loading your name..."
                 />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                ✓ Auto-populated from your profile
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                Auto-populated from your Google profile
               </p>
             </FormField>
 
-            {/* Submitter Email - Read-only, auto-populated */}
+            {/* Submitter Email - Non-editable, auto-populated */}
             <FormField
               label="Submitter Email"
               required
-              tooltip="Your email address from your profile. We'll send confirmations and follow-ups here."
+              tooltip="Your email address from your Google profile. We'll send confirmations and follow-ups here."
             >
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -129,13 +136,14 @@ export const CoreInfoStep = ({ formData, setFormData }: CoreInfoStepProps) => {
                   placeholder="Loading your email..."
                 />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                ✓ Auto-populated from your profile
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                Auto-populated from your Google profile
               </p>
             </FormField>
           </div>
 
-          {/* Territory - Still editable as it might vary per deal */}
+          {/* Territory - Editable */}
           <FormField
             label="Territory/Region"
             required
@@ -166,10 +174,10 @@ export const CoreInfoStep = ({ formData, setFormData }: CoreInfoStepProps) => {
               <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0"></div>
               <div className="text-sm">
                 <p className="font-medium text-blue-900 mb-1">
-                  Why is this information locked?
+                  Authentication Security
                 </p>
                 <p className="text-blue-700">
-                  Partner information is automatically populated from your authenticated profile to ensure accurate deal attribution and prevent errors. This also speeds up the registration process.
+                  Your name and email are automatically populated from your Google authentication to prevent errors and ensure proper deal attribution. Your company name can be edited if needed for this specific deal.
                 </p>
               </div>
             </div>

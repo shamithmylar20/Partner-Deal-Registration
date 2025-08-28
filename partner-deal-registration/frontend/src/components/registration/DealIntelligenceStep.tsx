@@ -127,7 +127,6 @@ export const DealIntelligenceStep = ({ formData, setFormData }: DealIntelligence
           <FormField
             label="Primary Product (Optional)"
             tooltip="Select the main product if required for ownership/routing."
-            helpText="Only required if product-based routing is needed"
           >
             <Select
               value={dealDetails.primaryProduct}
@@ -140,7 +139,7 @@ export const DealIntelligenceStep = ({ formData, setFormData }: DealIntelligence
                 <SelectItem value="mcp-server">MCP Server</SelectItem>
                 <SelectItem value="safe-rag">Safe RAG</SelectItem>
                 <SelectItem value="proxima-ai">Proxima AI</SelectItem>
-                <SelectItem value="pebblo-modules">Pebblo Modules</SelectItem>
+                <SelectItem value="pebblo-modules">Safe Inter (AI Gateway)</SelectItem>
                 <SelectItem value="professional-services">Professional Services</SelectItem>
               </SelectContent>
             </Select>

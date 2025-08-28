@@ -141,7 +141,7 @@ const Dashboard = () => {
     },
     {
       title: "Pending Approval",
-      value: metrics.pending.toString(),
+      value: metrics.submitted.toString(),
       change: metrics.submitted > 0 ? `${metrics.submitted} submitted` : "None pending",
       icon: Clock,
       description: "awaiting review"
@@ -329,21 +329,6 @@ const Dashboard = () => {
                                   <Badge variant="outline">{deal.primary_product}</Badge>
                                 </div>
                               )}
-                            </div>
-                            
-                            <div className="flex gap-2">
-                              <Button variant="outline" size="sm">
-                                <Eye className="w-4 h-4 mr-1" />
-                                View
-                              </Button>
-                              <Button variant="outline" size="sm" disabled={deal.status === 'approved'}>
-                                <Edit className="w-4 h-4 mr-1" />
-                                Edit
-                              </Button>
-                              <Button variant="outline" size="sm">
-                                <Copy className="w-4 h-4 mr-1" />
-                                Clone
-                              </Button>
                             </div>
                           </div>
                         </CardContent>

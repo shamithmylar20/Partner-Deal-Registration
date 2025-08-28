@@ -10,14 +10,13 @@ import { useFormValidation, getSubmissionPayload, ValidationRule } from "@/hooks
 import { useAuth } from '@/contexts/AuthContext';
 import apiClient from '@/services/apiClient';
 
-// Import step components
+// Import step components (removed DocumentationStep)
 import QuickCheckStep from "@/components/registration/QuickCheckStep";
 import { CoreInfoStep } from "@/components/registration/CoreInfoStep";
 import { DealIntelligenceStep } from "@/components/registration/DealIntelligenceStep";
-import { DocumentationStep } from "@/components/registration/DocumentationStep";
 import { ReviewStep } from "@/components/registration/ReviewStep";
 
-// Define FormData interface
+// Define FormData interface (removed uploadedFiles)
 interface FormData {
   companyName?: string;
   domain?: string;
@@ -34,33 +33,26 @@ interface FormData {
   contractType?: string;
   primaryProduct?: string;
   additionalNotes?: string;
-  uploadedFiles?: any[];
   agreedToTerms?: boolean;
 }
 
 const steps: Step[] = [
   {
     id: "quick-check",
-    title: "Quick Check",
+    title: "Quick Check", 
     description: "Duplicate detection",
     status: "current"
   },
   {
     id: "core-info",
     title: "Core Info",
-    description: "Partner & customer",
+    description: "Partner & customer", 
     status: "upcoming"
   },
   {
     id: "deal-intelligence",
     title: "Deal Intelligence",
     description: "Opportunity details",
-    status: "upcoming"
-  },
-  {
-    id: "documentation",
-    title: "Documentation",
-    description: "Supporting files",
     status: "upcoming"
   },
   {
@@ -74,8 +66,9 @@ const steps: Step[] = [
 const Register = () => {
   const { isAuthenticated, user } = useAuth();
   const [currentStepId, setCurrentStepId] = useState("quick-check");
+  const [quickCheckValid, setQuickCheckValid] = useState(false);
   
-  // Initialize formData with proper structure
+  // Initialize formData with proper structure (removed uploadedFiles)
   const [formData, setFormData] = useState<FormData>({
     companyName: '',
     domain: '',
@@ -92,7 +85,6 @@ const Register = () => {
     contractType: '',
     primaryProduct: '',
     additionalNotes: '',
-    uploadedFiles: [],
     agreedToTerms: false
   });
   
@@ -129,7 +121,88 @@ const Register = () => {
       index === currentStepIndex ? "current" : "upcoming"
   })) as Step[];
 
+  // FIXED: Step-specific validation functions
+  const validateQuickCheck = () => {
+    return quickCheckValid && 
+           formData.companyName?.trim() && 
+           formData.domain?.trim();
+  };
+
+  const validateCoreInfo = () => {
+    return formData.partnerCompany?.trim() &&
+           formData.submitterName?.trim() &&
+           formData.submitterEmail?.trim() &&
+           formData.territory?.trim() &&
+           formData.customerIndustry?.trim() &&
+           formData.customerLocation?.trim();
+  };
+
+  const validateDealIntelligence = () => {
+    return formData.dealStage?.trim() &&
+           formData.expectedCloseDate?.trim() &&
+           formData.dealValue?.trim() &&
+           formData.contractType?.trim();
+  };
+
+  const validateReview = () => {
+    return formData.agreedToTerms === true;
+  };
+
+  // FIXED: Check if current step can proceed with proper validation
+  const canProceedFromCurrentStep = () => {
+    switch (currentStepId) {
+      case "quick-check":
+        return validateQuickCheck();
+      case "core-info":
+        return validateCoreInfo();
+      case "deal-intelligence":
+        return validateDealIntelligence();
+      case "review":
+        return validateReview();
+      default:
+        return false;
+    }
+  };
+
+  // FIXED: Get step-specific error messages
+  const getStepErrorMessage = () => {
+    switch (currentStepId) {
+      case "quick-check":
+        if (!formData.companyName?.trim()) return "Please enter a company name";
+        if (!formData.domain?.trim()) return "Please enter a company domain";
+        if (!quickCheckValid) return "Please resolve duplicate detection issues or validation errors";
+        break;
+      case "core-info":
+        if (!formData.partnerCompany?.trim()) return "Please select your partner company";
+        if (!formData.submitterName?.trim()) return "Please enter your name";
+        if (!formData.submitterEmail?.trim()) return "Please enter your email";
+        if (!formData.territory?.trim()) return "Please select a territory";
+        if (!formData.customerIndustry?.trim()) return "Please select customer industry";
+        if (!formData.customerLocation?.trim()) return "Please enter customer location";
+        break;
+      case "deal-intelligence":
+        if (!formData.dealStage?.trim()) return "Please select deal stage";
+        if (!formData.expectedCloseDate?.trim()) return "Please select expected close date";
+        if (!formData.dealValue?.trim()) return "Please enter deal value";
+        if (!formData.contractType?.trim()) return "Please select contract type";
+        break;
+      case "review":
+        if (!formData.agreedToTerms) return "Please agree to terms and conditions";
+        break;
+    }
+    return "Please complete all required fields before proceeding";
+  };
+
   const handleNext = () => {
+    if (!canProceedFromCurrentStep()) {
+      toast({
+        title: "Cannot proceed",
+        description: getStepErrorMessage(),
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!isLastStep) {
       setCurrentStepId(steps[currentStepIndex + 1].id);
     }
@@ -235,14 +308,13 @@ const Register = () => {
             formData={formData} 
             setFormData={setFormData} 
             onNext={() => setCurrentStepId("core-info")}
+            onValidationChange={setQuickCheckValid}
           />
         );
       case "core-info":
         return <CoreInfoStep formData={formData} setFormData={setFormData} />;
       case "deal-intelligence":
         return <DealIntelligenceStep formData={formData} setFormData={setFormData} />;
-      case "documentation":
-        return <DocumentationStep formData={formData} setFormData={setFormData} />;
       case "review":
         return <ReviewStep formData={formData} setFormData={setFormData} />;
       default:
@@ -323,7 +395,10 @@ const Register = () => {
 
                   <div className="flex gap-3">
                     {!isLastStep ? (
-                      <Button onClick={handleNext}>
+                      <Button 
+                        onClick={handleNext}
+                        disabled={!canProceedFromCurrentStep()}
+                      >
                         Next
                         <ArrowRight className="w-4 h-4 ml-2" />
                       </Button>
@@ -332,7 +407,7 @@ const Register = () => {
                         onClick={handleSubmit}
                         className="w-full"
                         size="lg"
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || !canProceedFromCurrentStep()}
                       >
                         {isSubmitting ? (
                           <>

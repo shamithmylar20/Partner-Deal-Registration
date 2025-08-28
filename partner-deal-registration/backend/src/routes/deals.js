@@ -7,7 +7,6 @@ const {
 } = require('../controllers/dealController');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
 
-
 const router = express.Router();
 
 /**
@@ -79,6 +78,7 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
         pending: 0,
         approved: 0,
         rejected: 0,
+        submitted: 0,
         totalValue: 0
       });
     }
@@ -86,7 +86,7 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
     const headers = deals[0];
     const statusIndex = headers.indexOf('status');
     const valueIndex = headers.indexOf('deal_value');
-    const partnerIndex = headers.indexOf('partner_id');
+    const submitterEmailIndex = headers.indexOf('submitter_email'); // FIXED: Use actual field name
     
     let stats = {
       total: 0,
@@ -97,14 +97,16 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
       totalValue: 0
     };
 
-    // Filter deals by authenticated user's partner (if not admin)
+    // Filter deals by authenticated user's email (if not admin)
     for (let i = 1; i < deals.length; i++) {
-      const partnerId = deals[i][partnerIndex] || '';
+      const submitterEmail = deals[i][submitterEmailIndex] || '';
       const status = deals[i][statusIndex] || '';
       const value = parseFloat((deals[i][valueIndex] || '0').replace(/[^0-9.]/g, '')) || 0;
       
-      // Only include deals from user's partner (unless admin role)
-      if (req.user?.role === 'admin' || partnerId === req.user?.partnerId || !partnerId) {
+      // FIXED: Role-based filtering using actual email field
+      const canViewDeal = req.user?.role === 'admin' || submitterEmail === req.user?.email;
+      
+      if (canViewDeal) {
         stats.total++;
         stats.totalValue += value;
         
@@ -165,11 +167,11 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       });
     }
 
-    // Check if user has permission to update this deal
-    if (req.user?.role !== 'admin' && deal.partner_id !== req.user?.partnerId) {
+    // FIXED: Check permission using email instead of non-existent partner_id
+    if (req.user?.role !== 'admin' && deal.submitter_email !== req.user?.email) {
       return res.status(403).json({
         error: 'Permission denied',
-        message: 'You can only update deals from your own organization'
+        message: 'You can only update deals you submitted'
       });
     }
 
@@ -211,19 +213,20 @@ router.get('/my-deals', authenticateToken, async (req, res) => {
     }
 
     const headers = deals[0];
-    const partnerIndex = headers.indexOf('partner_id');
-    const submitterIndex = headers.indexOf('submitter_id');
+    const submitterEmailIndex = headers.indexOf('submitter_email'); // FIXED: Use actual field name
     let dealRecords = [];
 
-    // Convert to objects and filter by user's partner
+    // Convert to objects and filter by user's email
     for (let i = 1; i < deals.length && dealRecords.length < limit; i++) {
       const deal = {};
       headers.forEach((header, index) => {
         deal[header] = deals[i][index] || '';
       });
       
-      // Only include deals from user's partner or submitted by user
-      if (deal.partner_id === req.user?.partnerId || deal.submitter_id === req.user?.id) {
+      // FIXED: Only include deals submitted by the current user (unless admin)
+      const canViewDeal = req.user?.role === 'admin' || deal.submitter_email === req.user?.email;
+      
+      if (canViewDeal) {
         // Apply status filter
         if (status && deal.status !== status) continue;
         
@@ -236,8 +239,8 @@ router.get('/my-deals', authenticateToken, async (req, res) => {
       total: dealRecords.length,
       filters: { status, limit },
       user: {
-        partnerId: req.user?.partnerId,
-        userId: req.user?.id
+        email: req.user?.email,
+        role: req.user?.role
       }
     });
 

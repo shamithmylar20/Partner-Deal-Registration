@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Upload, Save, X, User, Building, Mail, MapPin, Shield, Calendar, CheckCircle } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, Upload, Save, X, User, Building, Mail, MapPin, Shield, Calendar, CheckCircle, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
@@ -17,51 +18,116 @@ const Profile = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [userDeals, setUserDeals] = useState([]);
   const [loadingDeals, setLoadingDeals] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const { toast } = useToast();
 
-  // Initialize profile data from authenticated user
+  // Profile data from backend APIs
   const [profileData, setProfileData] = useState({
+    // Non-editable (from Google Auth)
     firstName: "",
     lastName: "",
     email: "",
-    territory: "",
+    
+    // Company info (from Users sheet)
     company: "",
     role: "",
     joinDate: "",
+    
+    // Editable fields (from UserProfiles sheet)
+    territory: "",
+    company_description: "",
+    company_size: "",
+    website_url: "",
+    
+    // Computed fields
     dealCount: 0,
     avatarUrl: ""
   });
 
   const [formData, setFormData] = useState(profileData);
 
-  // Load user data when component mounts or user changes
+  // Load user profile data from backend
   useEffect(() => {
     if (user && isAuthenticated) {
-      const userData = {
-        firstName: user.firstName || "",
-        lastName: user.lastName || "",
-        email: user.email || "",
-        territory: "North America", // This could come from user profile API
-        company: user.partnerName || user.partnerId || "",
-        role: user.role === 'admin' ? 'Administrator' : 'Partner Manager',
-        joinDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }), // Could come from user.createdAt
-        dealCount: 0, // Will be loaded from API
-        avatarUrl: "" // Could store Google profile picture
-      };
-      
-      setProfileData(userData);
-      setFormData(userData);
-      
-      // Load user's deal count
+      loadUserProfile();
       loadUserDeals();
     }
   }, [user, isAuthenticated]);
 
-  // Load user's deals to get deal count and recent activity
+  // Load profile data from backend
+  const loadUserProfile = async () => {
+    try {
+      setLoadingProfile(true);
+      const response = await fetch('http://localhost:3001/api/v1/admin/profile', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const profile = data.profile;
+        
+        const profileData = {
+          // Non-editable from Google Auth
+          firstName: profile.firstName || "",
+          lastName: profile.lastName || "",
+          email: profile.email || "",
+          
+          // Company info  
+          company: profile.partner_company || "",
+          role: profile.role === 'admin' ? 'Administrator' : 'Partner Manager',
+          joinDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          
+          // Editable fields
+          territory: profile.territory || "North America",
+          company_description: profile.company_description || "",
+          company_size: profile.company_size || "",
+          website_url: profile.website_url || "",
+          
+          dealCount: 0, // Will be loaded separately
+          avatarUrl: ""
+        };
+        
+        setProfileData(profileData);
+        setFormData(profileData);
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      toast({
+        title: "Profile Load Error",
+        description: "Could not load profile data. Using authentication data.",
+        variant: "destructive"
+      });
+      
+      // Fallback to auth data
+      const authData = {
+        firstName: user?.firstName || "",
+        lastName: user?.lastName || "",
+        email: user?.email || "",
+        company: user?.partnerName || user?.partnerId || "",
+        role: user?.role === 'admin' ? 'Administrator' : 'Partner Manager',
+        joinDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        territory: "North America",
+        company_description: "",
+        company_size: "",
+        website_url: "",
+        dealCount: 0,
+        avatarUrl: ""
+      };
+      
+      setProfileData(authData);
+      setFormData(authData);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  // Load user's own deals (not all deals)
   const loadUserDeals = async () => {
     try {
       setLoadingDeals(true);
-      const response = await fetch('http://localhost:3001/api/v1/deals', {
+      const response = await fetch('http://localhost:3001/api/v1/admin/profile/deals', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
         }
@@ -70,6 +136,8 @@ const Profile = () => {
       if (response.ok) {
         const data = await response.json();
         setUserDeals(data.deals || []);
+        
+        // Update deal count in profile data
         setProfileData(prev => ({
           ...prev,
           dealCount: data.deals?.length || 0
@@ -80,7 +148,7 @@ const Profile = () => {
         }));
       }
     } catch (error) {
-      console.error('Error loading deals:', error);
+      console.error('Error loading user deals:', error);
     } finally {
       setLoadingDeals(false);
     }
@@ -90,16 +158,37 @@ const Profile = () => {
     setIsSaving(true);
     
     try {
-      // In a real app, this would call a profile update API
-      // For now, we'll simulate the API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setProfileData(formData);
-      setIsEditing(false);
-      toast({
-        title: "Profile Updated",
-        description: "Your profile information has been successfully updated.",
+      const response = await fetch('http://localhost:3001/api/v1/admin/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
+        },
+        body: JSON.stringify({
+          territory: formData.territory,
+          company_description: formData.company_description,
+          company_size: formData.company_size,
+          website_url: formData.website_url,
+          company: formData.company
+        })
       });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setProfileData(formData);
+        setIsEditing(false);
+        toast({
+          title: "Profile Updated",
+          description: result.message || "Your profile information has been successfully updated.",
+        });
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Update Failed",
+          description: error.message || "There was an error updating your profile.",
+          variant: "destructive"
+        });
+      }
     } catch (error) {
       toast({
         title: "Update Failed",
@@ -145,6 +234,17 @@ const Profile = () => {
           <Link to="/auth" className="text-primary hover:underline">
             Go to Login
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadingProfile) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your profile...</p>
         </div>
       </div>
     );
@@ -252,44 +352,59 @@ const Profile = () => {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name</Label>
+                    <Label htmlFor="firstName" className="flex items-center gap-2">
+                      First Name
+                      <Lock className="w-3 h-3 text-muted-foreground" />
+                    </Label>
                     <Input
                       id="firstName"
                       value={formData.firstName}
-                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      disabled={!isEditing}
+                      disabled // Always disabled - from Google Auth
+                      className="bg-muted/50 text-muted-foreground cursor-not-allowed"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      From Google authentication
+                    </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name</Label>
+                    <Label htmlFor="lastName" className="flex items-center gap-2">
+                      Last Name
+                      <Lock className="w-3 h-3 text-muted-foreground" />
+                    </Label>
                     <Input
                       id="lastName"
                       value={formData.lastName}
-                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      disabled={!isEditing}
+                      disabled // Always disabled - from Google Auth
+                      className="bg-muted/50 text-muted-foreground cursor-not-allowed"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      From Google authentication
+                    </p>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
+                  <Label htmlFor="email" className="flex items-center gap-2">
+                    Email Address
+                    <Lock className="w-3 h-3 text-muted-foreground" />
+                  </Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                     <Input
                       id="email"
                       type="email"
                       value={formData.email}
-                      disabled // Email from Google OAuth should not be editable
-                      className="pl-10 bg-muted/50"
+                      disabled // Always disabled - from Google Auth
+                      className="pl-10 bg-muted/50 text-muted-foreground cursor-not-allowed"
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Email address from your Google authentication cannot be changed
+                    Email address from Google authentication cannot be changed
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="territory">Territory</Label>
+                  <Label htmlFor="territory">Territory/Region</Label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-10" />
                     {isEditing ? (
@@ -311,7 +426,7 @@ const Profile = () => {
                       <Input
                         value={formData.territory}
                         disabled
-                        className="pl-10"
+                        className="pl-10 bg-muted/50"
                       />
                     )}
                   </div>
@@ -327,26 +442,90 @@ const Profile = () => {
                   Company Information
                 </CardTitle>
                 <CardDescription>
-                  Your partner company details (from authentication)
+                  {isEditing ? "Update your company details" : "Your partner company details"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Company Name</Label>
-                  <Input value={profileData.company} disabled className="bg-muted/50" />
-                  <p className="text-xs text-muted-foreground">
-                    Company information is linked to your authentication
-                  </p>
+                  {isEditing ? (
+                    <Input
+                      value={formData.company}
+                      onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                      placeholder="Enter your company name..."
+                    />
+                  ) : (
+                    <Input
+                      value={formData.company}
+                      disabled
+                      className="bg-muted/50"
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Partner Role</Label>
-                  <Input value={profileData.role} disabled className="bg-muted/50" />
+                  <Label>Company Description</Label>
+                  {isEditing ? (
+                    <Textarea
+                      value={formData.company_description}
+                      onChange={(e) => setFormData({ ...formData, company_description: e.target.value })}
+                      placeholder="Brief description of your company..."
+                      rows={3}
+                    />
+                  ) : (
+                    <Textarea
+                      value={formData.company_description || "No description provided"}
+                      disabled
+                      className="bg-muted/50 text-muted-foreground cursor-not-allowed"
+                      rows={3}
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Partnership Start Date</Label>
-                  <Input value={profileData.joinDate} disabled className="bg-muted/50" />
+                  <Label>Company Size</Label>
+                  {isEditing ? (
+                    <Select
+                      value={formData.company_size}
+                      onValueChange={(value) => setFormData({ ...formData, company_size: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select company size" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1-10">1-10 employees</SelectItem>
+                        <SelectItem value="11-50">11-50 employees</SelectItem>
+                        <SelectItem value="51-200">51-200 employees</SelectItem>
+                        <SelectItem value="201-500">201-500 employees</SelectItem>
+                        <SelectItem value="501-1000">501-1000 employees</SelectItem>
+                        <SelectItem value="1000+">1000+ employees</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={formData.company_size || "Not specified"}
+                      disabled
+                      className="bg-muted/50"
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Website URL</Label>
+                  {isEditing ? (
+                    <Input
+                      type="url"
+                      value={formData.website_url}
+                      onChange={(e) => setFormData({ ...formData, website_url: e.target.value })}
+                      placeholder="https://yourcompany.com"
+                    />
+                  ) : (
+                    <Input
+                      value={formData.website_url || "Not provided"}
+                      disabled
+                      className="bg-muted/50"
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -354,7 +533,7 @@ const Profile = () => {
                   <Input 
                     value={loadingDeals ? "Loading..." : profileData.dealCount.toString()} 
                     disabled 
-                    className="bg-muted/50"
+                    className="bg-muted/50 text-muted-foreground cursor-not-allowed"
                   />
                 </div>
               </CardContent>
@@ -365,27 +544,37 @@ const Profile = () => {
           {userDeals.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Recent Deal Activity</CardTitle>
+                <CardTitle>Your Deal Activity</CardTitle>
                 <CardDescription>
-                  Your latest deal registrations
+                  Your recent deal registrations (only deals you submitted)
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {userDeals.slice(0, 3).map((deal: any, index: number) => (
-                    <div key={deal.id} className="flex justify-between items-center p-3 border rounded-lg">
+                    <div key={deal.id || index} className="flex justify-between items-center p-3 border rounded-lg">
                       <div>
-                        <p className="font-medium">{deal.company_name}</p>
+                        <p className="font-medium">{deal.company_name || deal.customer_company}</p>
                         <p className="text-sm text-muted-foreground">
-                          {deal.domain} • {deal.customer_industry}
+                          {deal.domain} • {deal.customer_industry || deal.industry}
                         </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            deal.status === 'approved' ? 'bg-green-100 text-green-800' :
+                            deal.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                            deal.status === 'submitted' ? 'bg-blue-100 text-blue-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {deal.status?.charAt(0).toUpperCase() + deal.status?.slice(1) || 'Pending'}
+                          </span>
+                        </div>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-medium text-green-600">
                           ${parseInt(deal.deal_value || '0').toLocaleString()}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(deal.created_at).toLocaleDateString()}
+                          {deal.created_at ? new Date(deal.created_at).toLocaleDateString() : 'Recent'}
                         </p>
                       </div>
                     </div>
@@ -431,7 +620,7 @@ const Profile = () => {
                 <div className="space-y-1">
                   <p className="font-medium">Account Status</p>
                   <p className="text-sm text-muted-foreground">
-                    Active partner account
+                    {profileData.role === 'Administrator' ? 'Admin account' : 'Active partner account'}
                   </p>
                 </div>
                 <div className="flex items-center text-green-600">

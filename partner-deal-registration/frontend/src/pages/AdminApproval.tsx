@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, XCircle, Clock, Building2, DollarSign, Calendar, User, Mail, MapPin, UserPlus, Shield } from "lucide-react";
+import { CheckCircle, XCircle, Clock, Building2, DollarSign, Calendar, User, Mail, MapPin, UserPlus, Shield, Trash2 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -35,6 +35,13 @@ interface Deal {
   rejection_reason?: string;
 }
 
+interface AdminUser {
+  email: string;
+  added_by: string;
+  added_at: string;
+  status: string;
+}
+
 const AdminApproval = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -42,16 +49,13 @@ const AdminApproval = () => {
   const [loading, setLoading] = useState(true);
   const [processingDeal, setProcessingDeal] = useState<string | null>(null);
   
-  // Add New Admin Modal State
+  // Admin Management State
   const [isAddAdminOpen, setIsAddAdminOpen] = useState(false);
+  const [isViewAdminsOpen, setIsViewAdminsOpen] = useState(false);
   const [addingAdmin, setAddingAdmin] = useState(false);
-  const [newAdminForm, setNewAdminForm] = useState({
-    email: '',
-    firstName: '',
-    lastName: '',
-    partnerCompany: 'Daxa Internal',
-    password: ''
-  });
+  const [adminList, setAdminList] = useState<AdminUser[]>([]);
+  const [loadingAdmins, setLoadingAdmins] = useState(false);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
 
   // Check if current user is an approver (either by email OR by role)
   const approvers = ['huseini@daxa.ai', 'apoorva@daxa.ai', 'sridhar@daxa.ai', 'admin@daxa.ai'];
@@ -88,6 +92,129 @@ const AdminApproval = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAdminList = async () => {
+    try {
+      setLoadingAdmins(true);
+      const response = await fetch('http://localhost:3001/api/v1/admin/list', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAdminList(data.admins || []);
+      }
+    } catch (error) {
+      console.error('Error loading admin list:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load admin list",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingAdmins(false);
+    }
+  };
+
+  const handleAddAdmin = async () => {
+    if (!newAdminEmail.trim()) {
+      toast({
+        title: "Invalid Email",
+        description: "Please enter a valid email address",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newAdminEmail.trim())) {
+      toast({
+        title: "Invalid Email",
+        description: "Please enter a valid email address",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setAddingAdmin(true);
+      
+      const response = await fetch('http://localhost:3001/api/v1/admin/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
+        },
+        body: JSON.stringify({
+          email: newAdminEmail.trim().toLowerCase()
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: "Admin Added Successfully",
+          description: `${newAdminEmail} has been added as an admin. They will have admin privileges when they next sign in with Google.`,
+        });
+        
+        // Reset form and close modal
+        setNewAdminEmail('');
+        setIsAddAdminOpen(false);
+        
+        // Refresh admin list if it's open
+        if (isViewAdminsOpen) {
+          loadAdminList();
+        }
+      } else {
+        throw new Error(data.message || 'Failed to add admin');
+      }
+    } catch (error: any) {
+      console.error('Error adding admin:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add new admin",
+        variant: "destructive"
+      });
+    } finally {
+      setAddingAdmin(false);
+    }
+  };
+
+  const handleRemoveAdmin = async (adminEmail: string) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/v1/admin/remove`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
+        },
+        body: JSON.stringify({
+          email: adminEmail
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Admin Removed",
+          description: `${adminEmail} has been removed from admin list`,
+        });
+        loadAdminList();
+      } else {
+        throw new Error('Failed to remove admin');
+      }
+    } catch (error) {
+      console.error('Error removing admin:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove admin",
+        variant: "destructive"
+      });
     }
   };
 
@@ -130,78 +257,6 @@ const AdminApproval = () => {
     }
   };
 
-  const handleAddAdmin = async () => {
-    try {
-      setAddingAdmin(true);
-      
-      const response = await fetch('http://localhost:3001/api/v1/admin/add-admin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
-        },
-        body: JSON.stringify(newAdminForm)
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        toast({
-          title: "Admin Added Successfully",
-          description: `${newAdminForm.firstName} ${newAdminForm.lastName} has been added as an admin.`,
-        });
-        
-        // Reset form and close modal
-        setNewAdminForm({
-          email: '',
-          firstName: '',
-          lastName: '',
-          partnerCompany: 'Daxa Internal',
-          password: ''
-        });
-        setIsAddAdminOpen(false);
-      } else {
-        throw new Error(data.message || 'Failed to add admin');
-      }
-    } catch (error: any) {
-      console.error('Error adding admin:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add new admin",
-        variant: "destructive"
-      });
-    } finally {
-      setAddingAdmin(false);
-    }
-  };
-
-  const generateRandomPassword = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let password = '';
-    for (let i = 0; i < 10; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setNewAdminForm({ ...newAdminForm, password });
-  };
-
-  const formatCurrency = (value: string) => {
-    const num = parseFloat(value.replace(/[^0-9.]/g, ''));
-    if (isNaN(num)) return 'Not specified';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-    }).format(num);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
   if (!isApprover) {
     return (
       <div className="min-h-screen bg-background">
@@ -227,154 +282,137 @@ const AdminApproval = () => {
             <p className="text-muted-foreground">Review and approve pending deal registrations</p>
           </div>
           
-          {/* Add New Admin Button */}
-          <Dialog open={isAddAdminOpen} onOpenChange={setIsAddAdminOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="flex items-center gap-2">
-                <UserPlus className="w-4 h-4" />
-                Add New Admin
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-blue-600" />
+          {/* Admin Management Buttons */}
+          <div className="flex gap-2">
+            {/* View Admin List */}
+            <Dialog open={isViewAdminsOpen} onOpenChange={setIsViewAdminsOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" onClick={loadAdminList}>
+                  <Shield className="w-4 h-4 mr-2" />
+                  View Admins
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>Current Administrators</DialogTitle>
+                  <DialogDescription>
+                    Users with admin privileges in the system
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="max-h-60 overflow-y-auto">
+                  {loadingAdmins ? (
+                    <div className="text-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                    </div>
+                  ) : adminList.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4">No admins found</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {adminList.map((admin, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">{admin.email}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Added by {admin.added_by} on {new Date(admin.added_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {admin.email !== user?.email && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRemoveAdmin(admin.email)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Add New Admin */}
+            <Dialog open={isAddAdminOpen} onOpenChange={setIsAddAdminOpen}>
+              <DialogTrigger asChild>
+                <Button className="flex items-center gap-2">
+                  <UserPlus className="w-4 h-4" />
                   Add New Admin
-                </DialogTitle>
-                <DialogDescription>
-                  Create a new admin account. The new admin will be able to approve deals and manage the system.
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="email" className="text-right">
-                    Email
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="admin@company.com"
-                    value={newAdminForm.email}
-                    onChange={(e) => setNewAdminForm({ ...newAdminForm, email: e.target.value })}
-                    className="col-span-3"
-                  />
-                </div>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-blue-600" />
+                    Add New Admin
+                  </DialogTitle>
+                  <DialogDescription>
+                    Enter the Google email address of the person you want to make an admin. 
+                    They will gain admin privileges when they next sign in with Google OAuth.
+                  </DialogDescription>
+                </DialogHeader>
                 
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="firstName" className="text-right">
-                    First Name
-                  </Label>
-                  <Input
-                    id="firstName"
-                    placeholder="John"
-                    value={newAdminForm.firstName}
-                    onChange={(e) => setNewAdminForm({ ...newAdminForm, firstName: e.target.value })}
-                    className="col-span-3"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="lastName" className="text-right">
-                    Last Name
-                  </Label>
-                  <Input
-                    id="lastName"
-                    placeholder="Doe"
-                    value={newAdminForm.lastName}
-                    onChange={(e) => setNewAdminForm({ ...newAdminForm, lastName: e.target.value })}
-                    className="col-span-3"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="partnerCompany" className="text-right">
-                    Company
-                  </Label>
-                  <Input
-                    id="partnerCompany"
-                    value={newAdminForm.partnerCompany}
-                    onChange={(e) => setNewAdminForm({ ...newAdminForm, partnerCompany: e.target.value })}
-                    className="col-span-3"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="password" className="text-right">
-                    Password
-                  </Label>
-                  <div className="col-span-3 flex gap-2">
+                <div className="grid gap-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="adminEmail">Google Email Address</Label>
                     <Input
-                      id="password"
-                      type="text"
-                      placeholder="Enter password"
-                      value={newAdminForm.password}
-                      onChange={(e) => setNewAdminForm({ ...newAdminForm, password: e.target.value })}
+                      id="adminEmail"
+                      type="email"
+                      placeholder="admin@company.com"
+                      value={newAdminEmail}
+                      onChange={(e) => setNewAdminEmail(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newAdminEmail.trim()) {
+                          handleAddAdmin();
+                        }
+                      }}
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={generateRandomPassword}
-                    >
-                      Generate
-                    </Button>
+                  </div>
+                  
+                  <div className="text-xs text-muted-foreground bg-blue-50 p-3 rounded-md">
+                    <p><strong>How it works:</strong></p>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>Enter the person's Gmail or Google Workspace email</li>
+                      <li>They will become an admin when they next sign in</li>
+                      <li>Admins can approve deals and manage other admins</li>
+                    </ul>
                   </div>
                 </div>
                 
-                <div className="text-xs text-muted-foreground bg-blue-50 p-3 rounded-md">
-                  <p><strong>Note:</strong> The new admin will be able to:</p>
-                  <ul className="list-disc list-inside mt-1 space-y-1">
-                    <li>Approve and reject deal registrations</li>
-                    <li>Access the admin dashboard</li>
-                    <li>Add other admin users</li>
-                  </ul>
-                </div>
-              </div>
-              
-              <DialogFooter>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => {
-                    setIsAddAdminOpen(false);
-                    setNewAdminForm({
-                      email: '',
-                      firstName: '',
-                      lastName: '',
-                      partnerCompany: 'Daxa Internal',
-                      password: ''
-                    });
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  type="button" 
-                  onClick={handleAddAdmin}
-                  disabled={
-                    addingAdmin || 
-                    !newAdminForm.email || 
-                    !newAdminForm.firstName || 
-                    !newAdminForm.lastName ||
-                    !newAdminForm.password
-                  }
-                >
-                  {addingAdmin ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Adding...
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-4 h-4 mr-2" />
-                      Add Admin
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => {
+                      setIsAddAdminOpen(false);
+                      setNewAdminEmail('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="button" 
+                    onClick={handleAddAdmin}
+                    disabled={addingAdmin || !newAdminEmail.trim()}
+                  >
+                    {addingAdmin ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Adding...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-4 h-4 mr-2" />
+                        Add Admin
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {loading ? (
@@ -406,6 +444,7 @@ const AdminApproval = () => {
   );
 };
 
+// DealCard component remains the same as before
 const DealCard: React.FC<{
   deal: Deal;
   onApprove: (reason?: string) => void;
