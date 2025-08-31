@@ -7,20 +7,20 @@ const rateLimit = require('express-rate-limit');
 require('express-async-errors');
 require('dotenv').config();
 
-
 // Import route modules
 const authRoutes = require('./routes/auth');
 const dealRoutes = require('./routes/deals');
 const adminRoutes = require('./routes/admin');
 
-
-
 const app = express();
+
+// Trust proxy for production deployments (Railway, Render, etc.)
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet());
 
-// Rate limiting
+// Rate limiting - production ready
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -31,7 +31,7 @@ const limiter = rateLimit({
 
 app.use('/api', limiter);
 
-// CORS configuration
+// CORS configuration - production ready with environment variables
 const corsOptions = {
   origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
@@ -114,38 +114,44 @@ app.get('/api/v1/test-sheets', async (req, res) => {
 app.get('/api/v1/debug-sheets', async (req, res) => {
   try {
     res.json({
-      spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
-      keyPath: process.env.GOOGLE_PRIVATE_KEY_PATH,
-      fileExists: require('fs').existsSync(process.env.GOOGLE_PRIVATE_KEY_PATH),
-      serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
+      spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID ? 'SET' : 'MISSING',
+      keyPath: process.env.GOOGLE_PRIVATE_KEY_PATH ? 'SET' : 'MISSING',
+      hasCredentials: !!(process.env.GOOGLE_SHEETS_PRIVATE_KEY || process.env.GOOGLE_PRIVATE_KEY_PATH),
+      serviceAccountEmail: process.env.GOOGLE_SHEETS_CLIENT_EMAIL ? 'SET' : 'MISSING'
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Debug OAuth config
+// Debug OAuth config - production ready
 app.get('/api/v1/debug-oauth', (req, res) => {
+  const baseURL = `${req.protocol}://${req.get('host')}`;
+  
   res.json({
     googleClientId: process.env.GOOGLE_CLIENT_ID ? 'SET' : 'MISSING',
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ? 'SET' : 'MISSING',
     callbackUrl: process.env.GOOGLE_CALLBACK_URL,
-    authUrl: `http://localhost:3001/api/v1/auth/google`
+    authUrl: `${baseURL}/api/v1/auth/google`, // Dynamic URL
+    frontendUrl: process.env.FRONTEND_URL || 'NOT SET',
+    corsOrigin: process.env.CORS_ORIGIN || 'NOT SET'
   });
 });
 
-// Debug OAuth URLs
+// Debug OAuth URLs - production ready
 app.get('/api/v1/debug-oauth-urls', (req, res) => {
-    const baseURL = `${req.protocol}://${req.get('host')}`;
-    res.json({
-      currentHost: req.get('host'),
-      protocol: req.protocol,
-      baseURL: baseURL,
-      expectedCallbackURL: `${baseURL}/api/v1/auth/google/callback`,
-      envCallbackURL: process.env.GOOGLE_CALLBACK_URL,
-      actualPort: process.env.PORT || 3001
-    });
+  const baseURL = `${req.protocol}://${req.get('host')}`;
+  res.json({
+    currentHost: req.get('host'),
+    protocol: req.protocol,
+    baseURL: baseURL,
+    expectedCallbackURL: `${baseURL}/api/v1/auth/google/callback`,
+    envCallbackURL: process.env.GOOGLE_CALLBACK_URL,
+    frontendURL: process.env.FRONTEND_URL,
+    corsOrigins: process.env.CORS_ORIGIN?.split(','),
+    actualPort: process.env.PORT || 5000
   });
+});
 
 // 404 handler
 app.use('*', (req, res) => {

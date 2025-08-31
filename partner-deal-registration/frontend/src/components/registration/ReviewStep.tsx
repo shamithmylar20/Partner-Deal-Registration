@@ -307,11 +307,6 @@ const { errors: debugErrors, isValid: debugIsValid } = useFormValidation(formDat
           </AlertDescription>
         </Alert>
       )}
-
-      {/* Debug Info */}
-      <div className="text-xs text-muted-foreground bg-muted p-2 rounded">
-        Debug: agreedToTerms = {agreedToTerms.toString()}
-      </div>
     </div>
   );
 };

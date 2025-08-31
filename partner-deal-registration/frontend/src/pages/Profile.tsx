@@ -11,6 +11,7 @@ import { ArrowLeft, Upload, Save, X, User, Building, Mail, MapPin, Shield, Calen
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
+import apiClient from "@/services/apiClient"; // PRODUCTION READY
 
 const Profile = () => {
   const { user, isAuthenticated } = useAuth();
@@ -54,44 +55,36 @@ const Profile = () => {
     }
   }, [user, isAuthenticated]);
 
-  // Load profile data from backend
+  // Load profile data from backend - PRODUCTION READY
   const loadUserProfile = async () => {
     try {
       setLoadingProfile(true);
-      const response = await fetch('http://localhost:3001/api/v1/admin/profile', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
-        }
-      });
+      const data = await apiClient.request('/admin/profile');
+      const profile = data.profile;
       
-      if (response.ok) {
-        const data = await response.json();
-        const profile = data.profile;
+      const profileData = {
+        // Non-editable from Google Auth
+        firstName: profile.firstName || "",
+        lastName: profile.lastName || "",
+        email: profile.email || "",
         
-        const profileData = {
-          // Non-editable from Google Auth
-          firstName: profile.firstName || "",
-          lastName: profile.lastName || "",
-          email: profile.email || "",
-          
-          // Company info  
-          company: profile.partner_company || "",
-          role: profile.role === 'admin' ? 'Administrator' : 'Partner Manager',
-          joinDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-          
-          // Editable fields
-          territory: profile.territory || "North America",
-          company_description: profile.company_description || "",
-          company_size: profile.company_size || "",
-          website_url: profile.website_url || "",
-          
-          dealCount: 0, // Will be loaded separately
-          avatarUrl: ""
-        };
+        // Company info  
+        company: profile.partner_company || "",
+        role: profile.role === 'admin' ? 'Administrator' : 'Partner Manager',
+        joinDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
         
-        setProfileData(profileData);
-        setFormData(profileData);
-      }
+        // Editable fields
+        territory: profile.territory || "North America",
+        company_description: profile.company_description || "",
+        company_size: profile.company_size || "",
+        website_url: profile.website_url || "",
+        
+        dealCount: 0, // Will be loaded separately
+        avatarUrl: ""
+      };
+      
+      setProfileData(profileData);
+      setFormData(profileData);
     } catch (error) {
       console.error('Error loading profile:', error);
       toast({
@@ -123,30 +116,22 @@ const Profile = () => {
     }
   };
 
-  // Load user's own deals (not all deals)
+  // Load user's own deals (not all deals) - PRODUCTION READY
   const loadUserDeals = async () => {
     try {
       setLoadingDeals(true);
-      const response = await fetch('http://localhost:3001/api/v1/admin/profile/deals', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
-        }
-      });
+      const data = await apiClient.request('/admin/profile/deals');
+      setUserDeals(data.deals || []);
       
-      if (response.ok) {
-        const data = await response.json();
-        setUserDeals(data.deals || []);
-        
-        // Update deal count in profile data
-        setProfileData(prev => ({
-          ...prev,
-          dealCount: data.deals?.length || 0
-        }));
-        setFormData(prev => ({
-          ...prev,
-          dealCount: data.deals?.length || 0
-        }));
-      }
+      // Update deal count in profile data
+      setProfileData(prev => ({
+        ...prev,
+        dealCount: data.deals?.length || 0
+      }));
+      setFormData(prev => ({
+        ...prev,
+        dealCount: data.deals?.length || 0
+      }));
     } catch (error) {
       console.error('Error loading user deals:', error);
     } finally {
@@ -154,16 +139,13 @@ const Profile = () => {
     }
   };
 
+  // Handle save - PRODUCTION READY
   const handleSave = async () => {
     setIsSaving(true);
     
     try {
-      const response = await fetch('http://localhost:3001/api/v1/admin/profile', {
+      const data = await apiClient.request('/admin/profile', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
-        },
         body: JSON.stringify({
           territory: formData.territory,
           company_description: formData.company_description,
@@ -173,26 +155,16 @@ const Profile = () => {
         })
       });
       
-      if (response.ok) {
-        const result = await response.json();
-        setProfileData(formData);
-        setIsEditing(false);
-        toast({
-          title: "Profile Updated",
-          description: result.message || "Your profile information has been successfully updated.",
-        });
-      } else {
-        const error = await response.json();
-        toast({
-          title: "Update Failed",
-          description: error.message || "There was an error updating your profile.",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
+      setProfileData(formData);
+      setIsEditing(false);
+      toast({
+        title: "Profile Updated",
+        description: data.message || "Your profile information has been successfully updated.",
+      });
+    } catch (error: any) {
       toast({
         title: "Update Failed",
-        description: "There was an error updating your profile. Please try again.",
+        description: error.message || "There was an error updating your profile.",
         variant: "destructive"
       });
     } finally {

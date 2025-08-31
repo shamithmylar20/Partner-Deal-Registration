@@ -2,13 +2,10 @@ const express = require('express');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const authService = require('../services/authService');
-const jwt = require('jsonwebtoken');
-const googleSheetsService = require('../services/googleSheetsService');
-
 
 const router = express.Router();
 
-// Configure Google OAuth Strategy
+// Initialize Google OAuth strategy
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -31,22 +28,18 @@ passport.use(new GoogleStrategy({
   }
 }));
 
-// Initialize passport
-router.use(passport.initialize());
-
 /**
  * @route POST /api/v1/auth/register
- * @desc Register new partner user
+ * @desc Register a new user
  */
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, firstName, lastName, company, territory } = req.body;
+    const { email, password, firstName, lastName, partnerCompany, territory } = req.body;
 
-    // Basic validation
-    if (!email || !password || !firstName || !lastName || !company) {
+    if (!email || !password || !firstName || !lastName) {
       return res.status(400).json({
         error: 'Missing required fields',
-        required: ['email', 'password', 'firstName', 'lastName', 'company']
+        required: ['email', 'password', 'firstName', 'lastName']
       });
     }
 
@@ -55,13 +48,13 @@ router.post('/register', async (req, res) => {
       password,
       firstName,
       lastName,
-      company,
+      partnerCompany,
       territory
     });
 
     res.status(201).json({
       message: 'User registered successfully',
-      user: result
+      ...result
     });
 
   } catch (error) {
@@ -73,58 +66,29 @@ router.post('/register', async (req, res) => {
 });
 
 /**
- * @route POST /api/v1/auth/email-login
- * @desc Email/password login for testing
+ * @route POST /api/v1/auth/login/email
+ * @desc Login with email (existing endpoint)
  */
-router.post('/email-login', async (req, res) => {
+router.post('/login/email', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email } = req.body;
 
-    // Test admin credentials
-    const testCredentials = {
-      'admin@daxa.ai': 'admin123'  // Test admin account
-    };
-
-    if (!testCredentials[email] || testCredentials[email] !== password) {
-      return res.status(401).json({
-        error: 'Invalid credentials',
-        message: 'Email or password is incorrect'
+    if (!email) {
+      return res.status(400).json({
+        error: 'Email is required'
       });
     }
 
-    // Check if user exists in Users sheet, create if not
-    let user = await googleSheetsService.findRowByValue('Users', 'email', email);
+    const user = await authService.getUserByEmail(email);
     
     if (!user) {
-      // Create test admin user
-      const userData = [
-        'test-admin-' + Date.now(), // id
-        email, // email
-        'Test', // first_name
-        'Admin', // last_name
-        'Daxa Internal', // partner_company
-        'admin', // role
-        'active', // status
-        googleSheetsService.getCurrentTimestamp() // created_at
-      ];
-
-      await googleSheetsService.appendToSheet('Users', userData);
-      user = await googleSheetsService.findRowByValue('Users', 'email', email);
+      return res.status(404).json({
+        error: 'User not found'
+      });
     }
 
-    // Create JWT token
-    const tokenPayload = {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      partnerId: user.partner_company
-    };
-
-    const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, { 
-      expiresIn: '24h' 
-    });
-
-    // Format user data for frontend
+    const accessToken = authService.generateToken(user);
+    
     const userData = {
       id: user.id,
       email: user.email,
@@ -189,7 +153,7 @@ router.get('/google', passport.authenticate('google', {
 
 /**
  * @route GET /api/v1/auth/google/callback
- * @desc Google OAuth callback with admin check
+ * @desc Google OAuth callback with admin check - PRODUCTION READY
  */
 router.get('/google/callback', 
   passport.authenticate('google', { session: false }),
@@ -209,12 +173,17 @@ router.get('/google/callback',
         role: isAdmin ? 'admin' : user.role || 'user'
       };
       
-      // Use the correct frontend URL
-      const frontendURL = 'http://localhost:8080'; // Changed from 8080
-      res.redirect(`${frontendURL}/auth/callback?token=${accessToken}&user=${encodeURIComponent(JSON.stringify(updatedUser))}`);
+      // Use environment variable for frontend URL - PRODUCTION READY
+      const frontendURL = process.env.FRONTEND_URL || 'http://localhost:8080';
+      console.log('OAuth Redirect - Frontend URL:', frontendURL);
+      
+      const redirectUrl = `${frontendURL}/auth/callback?token=${accessToken}&user=${encodeURIComponent(JSON.stringify(updatedUser))}`;
+      console.log('Final redirect URL:', redirectUrl);
+      
+      res.redirect(redirectUrl);
     } catch (error) {
       console.error('Google callback error:', error);
-      const frontendURL = 'http://localhost:8080';
+      const frontendURL = process.env.FRONTEND_URL || 'http://localhost:8080';
       res.redirect(`${frontendURL}/auth?error=google_auth_failed`);
     }
   }

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import apiClient from "@/services/apiClient"; // PRODUCTION READY
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -16,11 +17,11 @@ const Auth = () => {
     });
     
     if (provider === 'Google') {
-      // Connect to real backend Google OAuth
-      window.location.href = 'http://localhost:3001/api/v1/auth/google';
+      // Use apiClient for production-ready OAuth - PRODUCTION READY
+      apiClient.googleLogin();
     } else if (provider === 'Microsoft') {
       // For Microsoft - you'll need to implement this endpoint in backend
-      window.location.href = 'http://localhost:3001/api/v1/auth/microsoft';
+      window.location.href = `${apiClient.baseURL}/auth/microsoft`;
     } else {
       setTimeout(() => {
         setIsLoading(false);

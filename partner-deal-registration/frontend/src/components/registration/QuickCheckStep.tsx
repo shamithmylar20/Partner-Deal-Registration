@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle, AlertCircle, Building2, Globe, Search, RefreshCw, AlertTriangle } from "lucide-react";
+import apiClient from "@/services/apiClient";
 
 interface QuickCheckStepProps {
   formData: any;
@@ -64,33 +65,17 @@ const QuickCheckStep: React.FC<QuickCheckStepProps> = ({ formData, setFormData, 
     return null;
   };
 
-  // API call to check for duplicates
+  // API call to check for duplicates - PRODUCTION READY
   const checkForDuplicates = async (companyName: string, domain: string) => {
     try {
-      // Don't set isCheckingDuplicates here since it's already set in triggerDuplicateCheck
       setDuplicateDeals([]);
       setDuplicateCheckCompleted(false);
 
-      const response = await fetch('http://localhost:3001/api/v1/deals/check-duplicate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
-        },
-        body: JSON.stringify({
-          companyName: companyName.trim(),
-          domain: domain.trim()
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.duplicates && data.duplicates.length > 0) {
-          setDuplicateDeals(data.duplicates);
-        }
-      } else {
-        console.error('Duplicate check failed:', response.statusText);
-        // Don't block the user if API fails - continue silently
+      // Use apiClient instead of direct fetch - PRODUCTION READY
+      const data = await apiClient.checkDuplicates(companyName.trim(), domain.trim());
+      
+      if (data.duplicates && data.duplicates.length > 0) {
+        setDuplicateDeals(data.duplicates);
       }
     } catch (error) {
       console.error('Error checking duplicates:', error);
@@ -352,7 +337,7 @@ const QuickCheckStep: React.FC<QuickCheckStepProps> = ({ formData, setFormData, 
             <AlertDescription>
               <div className="space-y-3">
                 <p className="font-medium text-red-800">
-                  🚫 Duplicate deal detected - Registration blocked
+                  Duplicate deal detected - Registration blocked
                 </p>
                 <p className="text-sm text-red-700">
                   {duplicateDeals.length > 1 
@@ -393,7 +378,7 @@ const QuickCheckStep: React.FC<QuickCheckStepProps> = ({ formData, setFormData, 
           <Alert className="border-green-200 bg-green-50">
             <CheckCircle className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-700">
-              ✅ No duplicate deals found. You're good to proceed!
+              No duplicate deals found. You're good to proceed!
             </AlertDescription>
           </Alert>
         )}
